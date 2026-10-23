@@ -2,36 +2,35 @@ import math
 import csv
 import sys
 
-
+# объявляем класс для расчёта характеристик СМО
 class SMOCalculator:
     def __init__(self):
-        self.params = {}
-        self.system_type = ""
-        self.results = {}
+        self.params = {} # словарь для хранения входных параметров (λ, μ, n, m)
+        self.system_type = "" # строка для хранения выбранного типа системы
+        self.results = {} # словарь для хранения результатов расчёта
 
-    # ==================== ВВОД ====================
-
+    # метод загрузки параметров из файла, по умолчанию input.csv
     def load_from_csv(self, filename='input.csv'):
         try:
-            with open(filename, 'r', encoding='utf-8') as file:
-                line = file.readline().strip()
+            with open(filename, 'r', encoding='utf-8') as file: 
+                line = file.readline().strip() # читаем первую строку и убираем пробелы/переводы строк
                 if not line:
                     print("Файл пустой")
                     return False
 
-                values = line.split(';')
+                values = line.split(';') # разбиваем строку по точке с запятой на список значений
 
-                if len(values) >= 4:
+                if len(values) >= 4: # проверяем, что в строке минимум 4 значения
                     try:
-                        self.params['lambda'] = float(values[0])
-                        self.params['mu'] = float(values[1])
-                        self.params['n'] = int(float(values[2]))
+                        self.params['lambda'] = float(values[0]) # первое значение — интенсивность λ
+                        self.params['mu'] = float(values[1]) # второе значение — интенсивность μ, преобразуем в float
+                        self.params['n'] = int(float(values[2])) # третье значение — число каналов n, преобразуем в int
 
-                        m_str = values[3].strip().lower()
-                        if m_str in ['inf', 'бесконечность', '∞', '']:
-                            self.params['m'] = None
-                        else:
-                            self.params['m'] = int(float(m_str))
+                        m_str = values[3].strip().lower() # четвёртое значение — m, убираем пробелы и приводим к нижнему регистру
+                        if m_str in ['inf', 'бесконечность', '∞', '']: # если m означает бесконечность
+                            self.params['m'] = None # сохраняем None как признак бесконечной очереди
+                        else: # иначе m — конечное число
+                            self.params['m'] = int(float(m_str)) # преобразуем m в целое число
 
                         print("\nПараметры успешно загружены:")
                         print(f"  λ = {self.params['lambda']}")
@@ -57,12 +56,11 @@ class SMOCalculator:
             print(f"Ошибка при чтении файла: {e}")
             return False
 
-    # ==================== ВАЛИДАЦИЯ ====================
-
+    # метод проверки интенсивностей λ и μ
     def _validate_rates(self):
-        lam = self.params.get('lambda')
-        mu = self.params.get('mu')
-        if lam is None or mu is None:
+        lam = self.params.get('lambda') # получаем λ из словаря параметров
+        mu = self.params.get('mu') # получаем μ из словаря параметров
+        if lam is None or mu is None: # если λ или μ не заданы
             print("Ошибка валидации: не заданы λ или μ")
             return False
         if lam <= 0:
@@ -73,6 +71,7 @@ class SMOCalculator:
             return False
         return True
 
+    # метод проверки числа каналов n
     def _validate_n(self, min_n=1):
         n = self.params.get('n')
         if n is None:
@@ -82,7 +81,8 @@ class SMOCalculator:
             print(f"Ошибка валидации: n должно быть ≥ {min_n} (получено {n})")
             return False
         return True
-
+    
+    # метод проверки длины очереди m
     def _validate_m(self, min_m=0):
         m = self.params.get('m')
         if m is None:
@@ -92,8 +92,6 @@ class SMOCalculator:
             print(f"Ошибка валидации: m должно быть ≥ {min_m} (получено {m})")
             return False
         return True
-
-    # ==================== ВЫБОР ТИПА ====================
 
     def select_system_type(self):
         print("\nВыберите тип системы:")
@@ -132,31 +130,30 @@ class SMOCalculator:
             else:
                 print("Неверный выбор. Попробуйте снова.")
 
-    # ==================== РАСЧЁТЫ ====================
-
+    # расчёт для M|M|n|0 (многоканальная с отказами)
     def calculate_mmn_0(self):
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n
             return False
 
-        lambd = self.params['lambda']
-        mu = self.params['mu']
-        n = self.params['n']
+        lambd = self.params['lambda'] # берём λ из параметров
+        mu = self.params['mu'] # берём μ из параметров
+        n = self.params['n'] # берём n из параметров
 
-        rho = lambd / mu
+        rho = lambd / mu # вычисляем приведённую интенсивность ρ = λ/μ
 
-        sum_series = 0.0
-        for k in range(n + 1):
-            sum_series += rho**k / math.factorial(k)
+        sum_series = 0.0 # инициализируем сумму для знаменателя p0
+        for k in range(n + 1): 
+            sum_series += rho**k / math.factorial(k) # добавляем слагаемое ρ^k / k!
 
-        p0 = 1.0 / sum_series
-        pn = (rho**n / math.factorial(n)) * p0
+        p0 = 1.0 / sum_series  # вычисляем вероятность простоя p0
+        pn = (rho**n / math.factorial(n)) * p0 # вычисляем вероятность занятости всех n каналов
 
-        p_otk = pn
-        q = 1 - p_otk
-        A = lambd * q
-        k_sr = rho * (1 - pn)
+        p_otk = pn # вероятность отказа равна вероятности занятости всех каналов
+        q = 1 - p_otk # относительная пропускная способность q = 1 - p_отк
+        A = lambd * q # абсолютная пропускная способность A = λ·q
+        k_sr = rho * (1 - pn) # среднее число занятых каналов
 
         self.results = {
             'Тип системы': self.system_type,
@@ -164,10 +161,10 @@ class SMOCalculator:
             'ρ (приведенная интенсивность)': rho,
             'p₀ (вероятность простоя)': p0,
         }
-        # Промежуточные вероятности p_1..p_{n-1}
+        # проходим по промежуточным состояниям 1..n-1
         for k in range(1, n):
             self.results[f'p_{k} (вероятность того, что занято {k} каналов)'] = \
-                (rho**k / math.factorial(k)) * p0
+                (rho**k / math.factorial(k)) * p0 # вычисляем и сохраняем p_k
         self.results.update({
             'pₙ (вероятность занятости всех каналов)': pn,
             'p_отк (вероятность отказа)': p_otk,
@@ -177,48 +174,50 @@ class SMOCalculator:
         })
         return True
 
+    # расчёт для M|M|1|m (одноканальная с ограниченной очередью)
     def calculate_mm1_m(self):
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n
             return False
-        if self.params['n'] != 1:
+        if self.params['n'] != 1: # если n не равно 1 (для этой системы n должно быть 1)
             print(f"Предупреждение: для M|M|1|m параметр n должен быть 1 "
                   f"(получено {self.params['n']}). Будет использовано n=1.")
             self.params['n'] = 1
-        if not self._validate_m(min_m=0):
+        if not self._validate_m(min_m=0): # проверяем m
             return False
 
         lambd = self.params['lambda']
         mu = self.params['mu']
         m = self.params['m']
 
-        rho = lambd / mu
-        rho_is_one = math.isclose(rho, 1.0, rel_tol=1e-9, abs_tol=1e-12)
+        rho = lambd / mu # вычисляем ρ
+        rho_is_one = math.isclose(rho, 1.0, rel_tol=1e-9, abs_tol=1e-12) # проверяем, равно ли ρ единице (с учётом погрешности)
 
+        # если ρ = 1 — особый случай
         if rho_is_one:
-            # ρ = 1 — предельный случай
-            p0 = 1.0 / (m + 2)
-            p = [p0] * (m + 2)
-            r_sr = m * (m + 1) / (2.0 * (m + 2))
-            omega_sr = (m + 1) / (m + 2.0)
+            p0 = 1.0 / (m + 2) # вероятность простоя p0 = 1/(m+2)
+            p = [p0] * (m + 2) # все вероятности состояний равны p0
+            r_sr = m * (m + 1) / (2.0 * (m + 2)) # средняя длина очереди для ρ=1
+            omega_sr = (m + 1) / (m + 2.0) # среднее число заявок под обслуживанием для ρ=1
         else:
-            p0 = (1 - rho) / (1 - rho**(m + 2))
-            p = [0.0] * (m + 2)
-            p[0] = p0
+            # если ρ ≠ 1 — общий случай
+            p0 = (1 - rho) / (1 - rho**(m + 2)) # вероятность простоя
+            p = [0.0] * (m + 2) # создаём список вероятностей состояний
+            p[0] = p0 # p[0] = p0
             for k in range(1, m + 2):
-                p[k] = rho**k * p0
-            numerator = rho**2 * (1 - rho**m * (m + 1 - m * rho))
-            denominator = (1 - rho**(m + 2)) * (1 - rho)
-            r_sr = numerator / denominator
-            omega_sr = (rho - rho**(m + 2)) / (1 - rho**(m + 2))
+                p[k] = rho**k * p0 # вычисляем p_k = ρ^k · p0
+            numerator = rho**2 * (1 - rho**m * (m + 1 - m * rho)) # числитель формулы для средней длины очереди
+            denominator = (1 - rho**(m + 2)) * (1 - rho) # знаменатель формулы
+            r_sr = numerator / denominator # средняя длина очереди
+            omega_sr = (rho - rho**(m + 2)) / (1 - rho**(m + 2)) # среднее число заявок под обслуживанием
 
-        p_otk = p[m + 1]
-        q = 1 - p_otk
-        A = lambd * q
-        v_sr = r_sr + omega_sr
-        t_ozh = r_sr / lambd
-        t_sist = t_ozh + q / mu
+        p_otk = p[m + 1] # вероятность отказа — вероятность состояния m+1
+        q = 1 - p_otk # относительная пропускная способность
+        A = lambd * q # абсолютная пропускная способность
+        v_sr = r_sr + omega_sr # среднее число заявок в системе
+        t_ozh = r_sr / lambd # среднее время ожидания
+        t_sist = t_ozh + q / mu # среднее время пребывания в системе
 
         self.results = {
             'Тип системы': self.system_type,
@@ -235,13 +234,14 @@ class SMOCalculator:
             't_сист (среднее время пребывания в системе)': t_sist,
         }
         return True
-
+    
+    # расчёт для M|M|1|∞ (одноканальная с неограниченной очередью)
     def calculate_mm1_inf(self):
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n
             return False
-        if self.params['n'] != 1:
+        if self.params['n'] != 1: # если n не равно 1
             print(f"Предупреждение: для M|M|1|∞ параметр n должен быть 1 "
                   f"(получено {self.params['n']}). Будет использовано n=1.")
             self.params['n'] = 1
@@ -249,9 +249,9 @@ class SMOCalculator:
         lambd = self.params['lambda']
         mu = self.params['mu']
         rho = lambd / mu
-
+        # если ρ ≥ 1 — стационарного режима нет
         if rho >= 1 or math.isclose(rho, 1.0, rel_tol=1e-9, abs_tol=1e-12):
-            self.results = {
+            self.results = { # формируем словарь с сообщением об отсутствии стационарного режима
                 'Тип системы': self.system_type,
                 'Параметры': f'λ={lambd}, μ={mu}',
                 'ρ (коэффициент загрузки)': rho,
@@ -261,11 +261,11 @@ class SMOCalculator:
             }
             return True
 
-        p0 = 1 - rho
-        r_sr = rho**2 / (1 - rho)
-        v_sr = rho / (1 - rho)
-        t_ozh = rho / (mu * (1 - rho))
-        t_sist = 1 / (mu * (1 - rho))
+        p0 = 1 - rho # вероятность простоя
+        r_sr = rho**2 / (1 - rho) # средняя длина очереди
+        v_sr = rho / (1 - rho) # среднее число заявок в системе
+        t_ozh = rho / (mu * (1 - rho)) # среднее время ожидания
+        t_sist = 1 / (mu * (1 - rho)) # среднее время пребывания в системе
 
         self.results = {
             'Тип системы': self.system_type,
@@ -279,13 +279,14 @@ class SMOCalculator:
             't_сист (среднее время пребывания в системе)': t_sist,
         }
         return True
-
+    
+    # расчёт для M|M|n|m (многоканальная с ограниченной очередью)
     def calculate_mmn_m(self):
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n
             return False
-        if not self._validate_m(min_m=0):
+        if not self._validate_m(min_m=0): # проверяем m
             return False
 
         lambd = self.params['lambda']
@@ -293,36 +294,37 @@ class SMOCalculator:
         n = self.params['n']
         m = self.params['m']
 
-        rho = lambd / mu
-        gamma = rho / n
-        gamma_is_one = math.isclose(gamma, 1.0, rel_tol=1e-9, abs_tol=1e-12)
-
-        sum1 = 0.0
+        rho = lambd / mu # вычисляем ρ
+        gamma = rho / n # вычисляем γ = ρ/n
+        gamma_is_one = math.isclose(gamma, 1.0, rel_tol=1e-9, abs_tol=1e-12) # проверяем, равно ли γ единице
+ 
+        sum1 = 0.0 # первая сумма для p0
         for k in range(n + 1):
-            sum1 += rho**k / math.factorial(k)
-
+            sum1 += rho**k / math.factorial(k) # добавляем ρ^k / k!
+        # если γ = 1 — особый случай
         if gamma_is_one:
-            sum2 = m
+            sum2 = m # вторая сумма равна m
         else:
-            sum2 = gamma * (1 - gamma**m) / (1 - gamma)
+            sum2 = gamma * (1 - gamma**m) / (1 - gamma) # вторая сумма — геометрическая прогрессия
 
-        p0 = 1.0 / (sum1 + (rho**n / math.factorial(n)) * sum2)
+        p0 = 1.0 / (sum1 + (rho**n / math.factorial(n)) * sum2) # вероятность простоя
 
-        p_otk = (rho**(n + m) / (n**m * math.factorial(n))) * p0
-        q = 1 - p_otk
-        A = lambd * q
-        k_sr = rho * (1 - p_otk)
+        p_otk = (rho**(n + m) / (n**m * math.factorial(n))) * p0 # вероятность отказа
+        q = 1 - p_otk # относительная пропускная способность
+        A = lambd * q # абсолютная пропускная способность
+        k_sr = rho * (1 - p_otk) # среднее число занятых каналов
 
-        if gamma_is_one:
+        if gamma_is_one: # если γ = 1
+            # средняя длина очереди для γ=1
             r_sr = (rho**(n + 1) * p0 / (math.factorial(n) * n)) * (m * (m + 1) / 2.0)
         else:
-            numerator = rho**(n + 1) * p0 * (1 - (m + 1) * gamma**m + m * gamma**(m + 1))
-            denominator = math.factorial(n) * n * (1 - gamma)**2
-            r_sr = numerator / denominator
+            numerator = rho**(n + 1) * p0 * (1 - (m + 1) * gamma**m + m * gamma**(m + 1)) # числитель
+            denominator = math.factorial(n) * n * (1 - gamma)**2 # знаменатель
+            r_sr = numerator / denominator # средняя длина очереди
 
-        v_sr = k_sr + r_sr
-        t_ozh = r_sr / lambd
-        t_sist = t_ozh + q / mu
+        v_sr = k_sr + r_sr # среднее число заявок в системе
+        t_ozh = r_sr / lambd # среднее время ожидания
+        t_sist = t_ozh + q / mu # среднее время пребывания в системе
 
         self.results = {
             'Тип системы': self.system_type,
@@ -340,20 +342,22 @@ class SMOCalculator:
             't_сист (среднее время пребывания в системе)': t_sist,
         }
         return True
-
+    
+    # расчёт для M|M|n|∞ (многоканальная с неограниченной очередью)
     def calculate_mmn_inf(self):
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n
             return False
 
         lambd = self.params['lambda']
         mu = self.params['mu']
         n = self.params['n']
 
-        rho = lambd / mu
-        gamma = rho / n
+        rho = lambd / mu # вычисляем ρ
+        gamma = rho / n # вычисляем γ = ρ/n
 
+        # если γ ≥ 1 — стационарного режима нет
         if gamma >= 1 or math.isclose(gamma, 1.0, rel_tol=1e-9, abs_tol=1e-12):
             self.results = {
                 'Тип системы': self.system_type,
@@ -366,19 +370,19 @@ class SMOCalculator:
             }
             return True
 
-        sum1 = 0.0
+        sum1 = 0.0 # первая сумма для p0
         for k in range(n + 1):
-            sum1 += rho**k / math.factorial(k)
+            sum1 += rho**k / math.factorial(k) # добавляем ρ^k / k!
 
-        sum2 = rho**(n + 1) / (math.factorial(n) * (n - rho))
+        sum2 = rho**(n + 1) / (math.factorial(n) * (n - rho)) # вторая сумма
 
-        p0 = 1.0 / (sum1 + sum2)
+        p0 = 1.0 / (sum1 + sum2) # вероятность простоя
 
-        r_sr = (rho**(n + 1) * p0) / (math.factorial(n) * n * (1 - gamma)**2)
-        k_sr = rho
-        v_sr = k_sr + r_sr
-        t_ozh = r_sr / lambd
-        t_sist = t_ozh + 1 / mu
+        r_sr = (rho**(n + 1) * p0) / (math.factorial(n) * n * (1 - gamma)**2) # средняя длина очереди
+        k_sr = rho # среднее число занятых каналов равно ρ
+        v_sr = k_sr + r_sr # среднее число заявок в системе
+        t_ozh = r_sr / lambd # среднее время ожидания
+        t_sist = t_ozh + 1 / mu # среднее время пребывания в системе
 
         self.results = {
             'Тип системы': self.system_type,
@@ -394,32 +398,32 @@ class SMOCalculator:
             't_сист (среднее время пребывания в системе)': t_sist,
         }
         return True
-
+    
+    # расчёт для замкнутой одноканальной СМО
     def calculate_closed_mm1(self):
-        # N = число источников (станков) задаётся в позиции n входного файла
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n
             return False
 
         N = self.params['n']
         lambd = self.params['lambda']
         mu = self.params['mu']
 
-        rho = lambd / mu
+        rho = lambd / mu # вычисляем ρ
 
-        sum_series = 0.0
+        sum_series = 0.0 # сумма для p0
         for i in range(N + 1):
-            sum_series += math.factorial(N) / math.factorial(N - i) * rho**i
+            sum_series += math.factorial(N) / math.factorial(N - i) * rho**i  # добавляем слагаемое
 
-        p0 = 1.0 / sum_series
-        A = (1 - p0) * mu
-        z_sr = N - (1 - p0) / rho
-        omega_sr = 1 - p0
-        r_sr = z_sr - omega_sr
-        Lambda_sr = A
+        p0 = 1.0 / sum_series # вероятность простоя 
+        A = (1 - p0) * mu # абсолютная пропускная способность
+        z_sr = N - (1 - p0) / rho # среднее число неисправных станков
+        omega_sr = 1 - p0 # среднее число станков под обслуживанием
+        r_sr = z_sr - omega_sr # среднее число станков в очереди
+        Lambda_sr = A # средняя интенсивность входящего потока
 
-        t_ozh = r_sr / Lambda_sr if Lambda_sr > 0 else 0.0
+        t_ozh = r_sr / Lambda_sr if Lambda_sr > 0 else 0.0 # среднее время ожидания (защита от деления на 0)
         t_sist = z_sr / Lambda_sr if Lambda_sr > 0 else 0.0
 
         self.results = {
@@ -438,13 +442,12 @@ class SMOCalculator:
             'Коэффициент занятости рабочего': 1 - p0,
         }
         return True
-
+    
+    # расчёт для замкнутой многоканальной СМО
     def calculate_closed_mmn(self):
-        # N — число источников (станков) в позиции n
-        # m — число каналов (рабочих) в позиции m
-        if not self._validate_rates():
+        if not self._validate_rates(): # проверяем λ и μ
             return False
-        if not self._validate_n(min_n=1):
+        if not self._validate_n(min_n=1): # проверяем n 
             return False
 
         N = self.params['n']
@@ -464,39 +467,39 @@ class SMOCalculator:
                   f"не может превышать число источников N={N}")
             return False
 
-        rho = lambd / mu
+        rho = lambd / mu # вычисляем ρ
 
-        sum_series = 0.0
+        sum_series = 0.0 # сумма для p0
         for i in range(m + 1):
-            sum_series += (math.factorial(N) /
-                           (math.factorial(i) * math.factorial(N - i))) * rho**i
+            sum_series += (math.factorial(N) / # числитель — N!
+                           (math.factorial(i) * math.factorial(N - i))) * rho**i # делим на i!(N-i)! и умножаем на ρ^i
         for i in range(m + 1, N + 1):
-            sum_series += (math.factorial(N) /
-                           (math.factorial(m) * math.factorial(N - i) *
-                            m**(i - m))) * rho**i
+            sum_series += (math.factorial(N) / # числитель — N!
+                           (math.factorial(m) * math.factorial(N - i) *  # делим на m!(N-i)!
+                            m**(i - m))) * rho**i # и на m^(i-m), умножаем на ρ^i
 
-        p0 = 1.0 / sum_series
+        p0 = 1.0 / sum_series # вероятность простоя всех рабочих
 
-        p = [0.0] * (N + 1)
+        p = [0.0] * (N + 1) # создаём список вероятностей состояний
         p[0] = p0
         for i in range(1, m + 1):
-            p[i] = (math.factorial(N) /
-                    (math.factorial(i) * math.factorial(N - i))) * rho**i * p0
+            p[i] = (math.factorial(N) / # N!
+                    (math.factorial(i) * math.factorial(N - i))) * rho**i * p0 # умножаем на ρ^i и p0
         for i in range(m + 1, N + 1):
-            p[i] = (math.factorial(N) /
-                    (math.factorial(m) * math.factorial(N - i) *
-                     m**(i - m))) * rho**i * p0
+            p[i] = (math.factorial(N) /  # N!
+                    (math.factorial(m) * math.factorial(N - i) * # делим на m!(N-i)!
+                     m**(i - m))) * rho**i * p0 # и на m^(i-m), умножаем на ρ^i и p0
 
-        k_sr = 0.0
+        k_sr = 0.0 # среднее число занятых каналов
         for i in range(1, m + 1):
-            k_sr += i * p[i]
+            k_sr += i * p[i] # добавляем i*p_i
         for i in range(m + 1, N + 1):
-            k_sr += m * p[i]
+            k_sr += m * p[i] # добавляем m*p_i
 
-        A = k_sr * mu
-        z_sr = N - k_sr / rho
-        r_sr = z_sr - k_sr
-        Lambda_sr = A
+        A = k_sr * mu # абсолютная пропускная способность
+        z_sr = N - k_sr / rho # среднее число неисправных станков
+        r_sr = z_sr - k_sr  # среднее число станков в очереди
+        Lambda_sr = A # средняя интенсивность входящего потока
 
         t_ozh = r_sr / Lambda_sr if Lambda_sr > 0 else 0.0
         t_sist = z_sr / Lambda_sr if Lambda_sr > 0 else 0.0
@@ -517,8 +520,6 @@ class SMOCalculator:
             'Коэффициент занятости рабочих': k_sr / m if m > 0 else 0.0,
         }
         return True
-
-    # ==================== ДИСПЕТЧЕР ====================
 
     def calculate(self):
         if not self.params:
